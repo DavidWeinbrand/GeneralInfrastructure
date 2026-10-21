@@ -13,6 +13,8 @@ Images live in `Dockerfiles/` (nested `PX4dockerfiles`, PX4 **v1.17.0**):
 
 `runSimNoeticMulti.sh` (`--num`, `--file`, `--world`, `--cylinder-radius`, `--vio-cam`, `--vio-pitch`, `--kill`) bind-mounts the inject scripts and `multidrone/airframes/10015_gazebo-classic_iris.post`, then runs `multidrone/sitl_multiple_run.sh`. Gazebo is pinned to loopback (`GAZEBO_IP=127.0.0.1`, `GAZEBO_MASTER_URI=http://127.0.0.1:11345`). A missing non-empty world exits before the cleanup trap (a running sim is left alone).
 
+By default **`CATSWARM_SIM_GPU=auto`** adds Docker `--gpus all` and NVIDIA GL env when `nvidia-smi` and the Docker nvidia runtime are present (typical laptop dGPU). Set `CATSWARM_SIM_GPU=off` to force software/Intel GL via X11 only, or `on` to require GPU passthrough.
+
 Iris spawn order: jinja → `inject_iris_sensors.py` → `inject_iris_colors.py` → `gz model --spawn-file` → `bin/px4`. PX4 attaches `OPTICAL_FLOW_RAD` only when flow is already advertised inside `Sensors::init()`.
 
 `CATSWARM_OF_MODE` default `mockup`: inline lidar (min 0.02 m) plus a headless optical-flow plugin (body velocity + lidar). `camera` or `both` also nest `model://px4flow` (needs GL). `CATSWARM_VIO_CAM=1` (default) adds fixed-joint `vio_cam` (320×240, 10 cm forward). Look direction is the SDF pose `CATSWARM_VIO_PITCH` (default −90 FRD, Gazebo +π/2). `sim_vio.sh pitch` is a no-op: `gz joint` on `vio_cam_pitch` collapses the iris to the origin.

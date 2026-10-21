@@ -63,6 +63,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --cylinder-radius=R, --cylinder-radius R  Cylinders disk radius meters (default: 10)"
             echo "  --vio-cam=0|1, --vio-cam 0|1  Inject Gazebo VIO camera + vio_cam_tcp (default: 1)"
             echo "  --vio-pitch=DEG, --vio-pitch DEG  FRD camera pitch degrees [-90, 0] baked into iris SDF (default: -90)"
+            echo "  Env CATSWARM_SIM_GPU=auto|on|off  NVIDIA GPU for Gazebo in Docker (default: auto)"
             echo ""
             exit 0
             ;;
@@ -183,6 +184,7 @@ if [ "$POSITIONS_FILE" = "$DEFAULT_POSITIONS" ]; then
         --volume="${SCRIPT_DIR}/multidrone/inject_iris_colors.py:/home/valentin/PX4-Autopilot/Tools/simulation/inject_iris_colors.py:ro"
         --volume="${SCRIPT_DIR}/multidrone/vio_cam_tcp.py:/home/valentin/PX4-Autopilot/Tools/simulation/vio_cam_tcp.py:ro"
         --volume="${SCRIPT_DIR}/multidrone/spawn_cylinders.py:/home/valentin/PX4-Autopilot/Tools/simulation/gazebo-classic/spawn_cylinders.py:ro"
+        --volume="${SCRIPT_DIR}/multidrone/spawn_scan_polygon.py:/home/valentin/PX4-Autopilot/Tools/simulation/gazebo-classic/spawn_scan_polygon.py:ro"
         --volume="${SCRIPT_DIR}/multidrone/airframes/10015_gazebo-classic_iris.post:/home/valentin/PX4-Autopilot/build/px4_sitl_default/etc/init.d-posix/airframes/10015_gazebo-classic_iris.post:ro"
         --volume="${SCRIPT_DIR}/Dockerfiles/models:/home/valentin/PX4-Autopilot/Tools/simulation/gazebo-classic/sitl_gazebo-classic/models/catswarm_host:ro"
     )
@@ -198,6 +200,7 @@ else
         --volume="${SCRIPT_DIR}/multidrone/inject_iris_colors.py:/home/valentin/PX4-Autopilot/Tools/simulation/inject_iris_colors.py:ro"
         --volume="${SCRIPT_DIR}/multidrone/vio_cam_tcp.py:/home/valentin/PX4-Autopilot/Tools/simulation/vio_cam_tcp.py:ro"
         --volume="${SCRIPT_DIR}/multidrone/spawn_cylinders.py:/home/valentin/PX4-Autopilot/Tools/simulation/gazebo-classic/spawn_cylinders.py:ro"
+        --volume="${SCRIPT_DIR}/multidrone/spawn_scan_polygon.py:/home/valentin/PX4-Autopilot/Tools/simulation/gazebo-classic/spawn_scan_polygon.py:ro"
         --volume="${SCRIPT_DIR}/multidrone/airframes/10015_gazebo-classic_iris.post:/home/valentin/PX4-Autopilot/build/px4_sitl_default/etc/init.d-posix/airframes/10015_gazebo-classic_iris.post:ro"
         --volume="${SCRIPT_DIR}/Dockerfiles/models:/home/valentin/PX4-Autopilot/Tools/simulation/gazebo-classic/sitl_gazebo-classic/models/catswarm_host:ro"
     )
@@ -218,6 +221,11 @@ if [[ "$WORLD" != "empty" && "$WORLD" != "cylinders" ]]; then
     )
 fi
 
+# NVIDIA GPU for gzclient/gzserver (hybrid laptop + nvidia-container-toolkit).
+# shellcheck source=multidrone/docker_sim_gpu_args.sh
+source "${SCRIPT_DIR}/multidrone/docker_sim_gpu_args.sh"
+catswarm_append_docker_gpu
+
 # Run docker container with the simulation command
 # Pin Gazebo transport to loopback. Without this, gzserver floods
 # "Exception sending a multicast message: Network is unreachable" on hosts
@@ -226,6 +234,8 @@ fi
 docker run -it --net=host \
            --cap-drop=all \
            --privileged \
+           "${CATSWARM_DOCKER_GPU_RUN_ARGS[@]}" \
+           "${CATSWARM_DOCKER_GPU_ENV[@]}" \
            --env="DISPLAY=$DISPLAY" \
            --env="QT_X11_NO_MITSHM=1" \
            --env="CATSWARM_OF_MODE=${CATSWARM_OF_MODE:-mockup}" \

@@ -260,6 +260,13 @@ else
 fi
 trap "cleanup" SIGINT SIGTERM EXIT
 
+SPAWN_POLY="${SPAWN_SCAN_POLYGON:-$SCRIPT_DIR/spawn_scan_polygon.py}"
+if [ -f "$SPAWN_POLY" ]; then
+	python3 "$SPAWN_POLY" || echo "WARNING: training scan polygon was not spawned"
+else
+	echo "WARNING: $SPAWN_POLY missing — Gazebo has no area-scan outline"
+fi
+
 if [ "${CATSWARM_WORLD:-$world}" = "cylinders" ]; then
 	SPAWN_CYL="${SPAWN_CYLINDERS:-$SCRIPT_DIR/spawn_cylinders.py}"
 	if [ -f "$SPAWN_CYL" ]; then
