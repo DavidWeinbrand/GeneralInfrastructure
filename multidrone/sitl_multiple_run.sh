@@ -11,6 +11,7 @@ function cleanup() {
 	pkill gzclient
 	pkill gzserver
 	pkill -f vio_cam_tcp.py || true
+	pkill -f yolo_det_bridge.py || true
 	if [ "${ROSCORE_OWNED:-0}" = "1" ]; then
 		pkill -x roscore || true
 	fi
@@ -60,7 +61,7 @@ function spawn_model() {
 	if [ "$MODEL" = "iris" ]; then
 		INJECT_SENSORS="${INJECT_IRIS_SENSORS:-/home/valentin/PX4-Autopilot/Tools/simulation/inject_iris_sensors.py}"
 		if [ -f "$INJECT_SENSORS" ]; then
-			python3 "$INJECT_SENSORS" /tmp/${MODEL}_${N}.sdf
+			python3 "$INJECT_SENSORS" /tmp/${MODEL}_${N}.sdf "${N}"
 		else
 			echo "WARNING: $INJECT_SENSORS missing — iris spawned without OF/rangefinder"
 		fi
@@ -148,7 +149,7 @@ sleep 1
 
 source ${src_path}/Tools/simulation/gazebo-classic/setup_gazebo.bash ${src_path} ${src_path}/build/${target}
 
-export GAZEBO_MODEL_PATH="${GAZEBO_MODEL_PATH}:/home/valentin/PX4-Autopilot/Tools/simulation/gazebo-classic/sitl_gazebo-classic/models/catswarm_host"
+export GAZEBO_MODEL_PATH="${GAZEBO_MODEL_PATH}:/home/valentin/PX4-Autopilot/Tools/simulation/gazebo-classic/sitl_gazebo-classic/models/catswarm_host:/home/valentin/PX4-Autopilot/Tools/simulation/gazebo-classic/sitl_gazebo-classic/models/catswarm_cars"
 
 # ROS2: gazebo_ros init/factory. ROS1 (Noetic): API plugin so model camera
 # plugins can advertise. Start roscore only when the master is down.
@@ -260,11 +261,14 @@ else
 fi
 trap "cleanup" SIGINT SIGTERM EXIT
 
-SPAWN_POLY="${SPAWN_SCAN_POLYGON:-$SCRIPT_DIR/spawn_scan_polygon.py}"
-if [ -f "$SPAWN_POLY" ]; then
-	python3 "$SPAWN_POLY" || echo "WARNING: training scan polygon was not spawned"
-else
-	echo "WARNING: $SPAWN_POLY missing — Gazebo has no area-scan outline"
+# Optional Gazebo ground outline (off by default; scan area is on the OB map + SM latch).
+if [ "${CATSWARM_SPAWN_SCAN_POLYGON:-0}" = "1" ]; then
+	SPAWN_POLY="${SPAWN_SCAN_POLYGON:-$SCRIPT_DIR/spawn_scan_polygon.py}"
+	if [ -f "$SPAWN_POLY" ]; then
+		python3 "$SPAWN_POLY" || echo "WARNING: training scan polygon was not spawned"
+	else
+		echo "WARNING: $SPAWN_POLY missing — cannot spawn area-scan outline"
+	fi
 fi
 
 if [ "${CATSWARM_WORLD:-$world}" = "cylinders" ]; then
@@ -286,6 +290,16 @@ elif [ "${CATSWARM_VIO_CAM:-1}" = "0" ]; then
 	echo "CATSWARM_VIO_CAM=0 — skipping vio_cam_tcp"
 else
 	echo "WARNING: $VIO_CAM_TCP missing — no SVOF camera TCP"
+fi
+
+if [ "${CATSWARM_YOLO_DET:-1}" = "1" ]; then
+	SPAWN_CARS="${SPAWN_SCAN_CARS:-$SCRIPT_DIR/spawn_scan_cars.py}"
+	if [ -f "$SPAWN_CARS" ]; then
+		python3 "$SPAWN_CARS" || echo "WARNING: area-scan cars were not spawned"
+	else
+		echo "WARNING: $SPAWN_CARS missing — no Gazebo cars"
+	fi
+	echo "Drone 1 camera with boxes is the host window '${WINDOW_NAME:-Drone 1 camera}' (not inside this container)."
 fi
 
 echo "Starting gazebo client"

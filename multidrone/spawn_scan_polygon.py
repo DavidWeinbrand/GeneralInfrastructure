@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Spawn the area-scan training polygon as a flat outline at the Gazebo origin.
+"""Optional: spawn the area-scan training polygon as a flat outline at the Gazebo origin.
 
+Not run by default; set ``CATSWARM_SPAWN_SCAN_POLYGON=1`` in ``sitl_multiple_run.sh``.
 The ring is one episode from ver_11_8 ``make_env_cfg`` (seed 11): 12 corners,
 about 900 m², centroid on the world origin. Gazebo +x is north and +y is east,
 so a vertex (east, north) is spawned at (x=north, y=east). The four default

@@ -140,12 +140,12 @@ def vio_cam_snippet(pitch_deg: float | None = None) -> str:
           </inertia>
         </inertial>
         <sensor name="camera" type="camera">
-          <update_rate>10</update_rate>
+          <update_rate>15</update_rate>
           <camera>
             <horizontal_fov>1.04719755</horizontal_fov>
             <image>
-              <width>320</width>
-              <height>240</height>
+              <width>640</width>
+              <height>640</height>
               <format>R8G8B8</format>
             </image>
           </camera>
@@ -170,6 +170,20 @@ def resolve_vio_cam(value: str | None = None) -> bool:
     return str(raw).strip().lower() not in ("0", "false", "off", "no")
 
 
+def yolo_det_requested() -> bool:
+    raw = os.environ.get("CATSWARM_YOLO_DET", "0").strip().lower()
+    return raw in ("1", "true", "yes", "on")
+
+
+def vio_cam_enabled_for_instance(instance_n: int | None) -> bool:
+    """Rendered camera. With CATSWARM_YOLO_DET, only iris 1 gets one."""
+    if not resolve_vio_cam():
+        return False
+    if yolo_det_requested() and instance_n is not None and int(instance_n) != 1:
+        return False
+    return True
+
+
 def resolve_of_mode(of_mode: str | None = None) -> str:
     mode = (of_mode or os.environ.get("CATSWARM_OF_MODE") or DEFAULT_OF_MODE).strip().lower()
     if mode not in OF_MODES:
@@ -179,7 +193,7 @@ def resolve_of_mode(of_mode: str | None = None) -> str:
     return mode
 
 
-def inject(sdf_path: Path, of_mode: str | None = None) -> None:
+def inject(sdf_path: Path, of_mode: str | None = None, instance_n: int | None = None) -> None:
     """Add the missing sensor blocks to ``sdf_path`` in place; idempotent per block."""
     mode = resolve_of_mode(of_mode)
     text = sdf_path.read_text(encoding="utf-8")
@@ -192,7 +206,7 @@ def inject(sdf_path: Path, of_mode: str | None = None) -> None:
         additions.append(PX4FLOW_SNIPPET)
     if mode in ("mockup", "both") and MOCKUP_PLUGIN_SO not in text:
         additions.append(MOCKUP_SNIPPET)
-    if resolve_vio_cam() and 'name="vio_cam_pitch"' not in text:
+    if vio_cam_enabled_for_instance(instance_n) and 'name="vio_cam_pitch"' not in text:
         additions.append(vio_cam_snippet())
     if not additions:
         return
@@ -205,9 +219,10 @@ def inject(sdf_path: Path, of_mode: str | None = None) -> None:
 
 
 def main() -> None:
-    if len(sys.argv) != 2:
-        raise SystemExit(f"usage: {sys.argv[0]} <iris.sdf>")
-    inject(Path(sys.argv[1]))
+    if len(sys.argv) not in (2, 3):
+        raise SystemExit(f"usage: {sys.argv[0]} <iris.sdf> [instance_n]")
+    instance_n = int(sys.argv[2]) if len(sys.argv) == 3 else None
+    inject(Path(sys.argv[1]), instance_n=instance_n)
 
 
 if __name__ == "__main__":

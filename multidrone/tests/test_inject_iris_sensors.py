@@ -119,13 +119,35 @@ def test_invalid_mode_rejected():
         resolve_of_mode("bogus")
 
 
+def test_yolo_det_renders_camera_on_drone_1_only(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("CATSWARM_YOLO_DET", "1")
+    drone1 = _write(tmp_path, BARE_IRIS)
+    inject(drone1, instance_n=1)
+    assert 'name="vio_cam_pitch"' in drone1.read_text(encoding="utf-8")
+    drone2 = tmp_path / "iris_2.sdf"
+    drone2.write_text(BARE_IRIS, encoding="utf-8")
+    inject(drone2, instance_n=2)
+    text2 = drone2.read_text(encoding="utf-8")
+    assert 'name="vio_cam_pitch"' not in text2
+    assert 'name="lidar_joint"' in text2
+    assert MOCKUP_PLUGIN_SO in text2
+
+
+def test_camera_stays_on_other_iris_without_yolo_det(tmp_path: Path, monkeypatch):
+    monkeypatch.delenv("CATSWARM_YOLO_DET", raising=False)
+    sdf = _write(tmp_path, BARE_IRIS)
+    inject(sdf, instance_n=2)
+    assert 'name="vio_cam_pitch"' in sdf.read_text(encoding="utf-8")
+
+
 def test_inject_adds_vio_camera_and_keeps_of_lidar(tmp_path: Path):
     sdf = _write(tmp_path, BARE_IRIS)
     inject(sdf)
     text = sdf.read_text(encoding="utf-8")
     assert 'name="vio_cam_pitch"' in text
     assert "horizontal_fov>1.04719755" in text.replace(" ", "") or "1.04719755" in text
-    assert "320" in text and "240" in text
+    assert "<width>640</width>" in text and "<height>640</height>" in text
+    assert "<update_rate>15</update_rate>" in text
     assert 'name="lidar_joint"' in text
     assert MOCKUP_PLUGIN_SO in text
     inject(sdf)

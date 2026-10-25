@@ -30,6 +30,7 @@ cleanup_on_exit() {
     pkill gzserver 2>/dev/null || true
     pkill -f "gz master" 2>/dev/null || true
     pkill -f "gazebo.*master" 2>/dev/null || true
+    pkill -f "yolo_det_bridge.py" 2>/dev/null || true
     
     # Kill process on port 11345 if any
     if lsof -ti:11345 >/dev/null 2>&1; then
@@ -63,6 +64,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --cylinder-radius=R, --cylinder-radius R  Cylinders disk radius meters (default: 10)"
             echo "  --vio-cam=0|1, --vio-cam 0|1  Inject Gazebo VIO camera + vio_cam_tcp (default: 1)"
             echo "  --vio-pitch=DEG, --vio-pitch DEG  FRD camera pitch degrees [-90, 0] baked into iris SDF (default: -90)"
+            echo "  Env CATSWARM_YOLO_DET=0|1     Spawn scan cars and open the Drone 1 camera window (default: 1)"
             echo "  Env CATSWARM_SIM_GPU=auto|on|off  NVIDIA GPU for Gazebo in Docker (default: auto)"
             echo ""
             exit 0
@@ -185,6 +187,9 @@ if [ "$POSITIONS_FILE" = "$DEFAULT_POSITIONS" ]; then
         --volume="${SCRIPT_DIR}/multidrone/vio_cam_tcp.py:/home/valentin/PX4-Autopilot/Tools/simulation/vio_cam_tcp.py:ro"
         --volume="${SCRIPT_DIR}/multidrone/spawn_cylinders.py:/home/valentin/PX4-Autopilot/Tools/simulation/gazebo-classic/spawn_cylinders.py:ro"
         --volume="${SCRIPT_DIR}/multidrone/spawn_scan_polygon.py:/home/valentin/PX4-Autopilot/Tools/simulation/gazebo-classic/spawn_scan_polygon.py:ro"
+        --volume="${SCRIPT_DIR}/multidrone/spawn_scan_cars.py:/home/valentin/PX4-Autopilot/Tools/simulation/gazebo-classic/spawn_scan_cars.py:ro"
+        --volume="${SCRIPT_DIR}/multidrone/yolo_det_bridge.py:/home/valentin/PX4-Autopilot/Tools/simulation/gazebo-classic/yolo_det_bridge.py:ro"
+        --volume="${SCRIPT_DIR}/multidrone/gazebo_models:/home/valentin/PX4-Autopilot/Tools/simulation/gazebo-classic/sitl_gazebo-classic/models/catswarm_cars:ro"
         --volume="${SCRIPT_DIR}/multidrone/airframes/10015_gazebo-classic_iris.post:/home/valentin/PX4-Autopilot/build/px4_sitl_default/etc/init.d-posix/airframes/10015_gazebo-classic_iris.post:ro"
         --volume="${SCRIPT_DIR}/Dockerfiles/models:/home/valentin/PX4-Autopilot/Tools/simulation/gazebo-classic/sitl_gazebo-classic/models/catswarm_host:ro"
     )
@@ -201,6 +206,9 @@ else
         --volume="${SCRIPT_DIR}/multidrone/vio_cam_tcp.py:/home/valentin/PX4-Autopilot/Tools/simulation/vio_cam_tcp.py:ro"
         --volume="${SCRIPT_DIR}/multidrone/spawn_cylinders.py:/home/valentin/PX4-Autopilot/Tools/simulation/gazebo-classic/spawn_cylinders.py:ro"
         --volume="${SCRIPT_DIR}/multidrone/spawn_scan_polygon.py:/home/valentin/PX4-Autopilot/Tools/simulation/gazebo-classic/spawn_scan_polygon.py:ro"
+        --volume="${SCRIPT_DIR}/multidrone/spawn_scan_cars.py:/home/valentin/PX4-Autopilot/Tools/simulation/gazebo-classic/spawn_scan_cars.py:ro"
+        --volume="${SCRIPT_DIR}/multidrone/yolo_det_bridge.py:/home/valentin/PX4-Autopilot/Tools/simulation/gazebo-classic/yolo_det_bridge.py:ro"
+        --volume="${SCRIPT_DIR}/multidrone/gazebo_models:/home/valentin/PX4-Autopilot/Tools/simulation/gazebo-classic/sitl_gazebo-classic/models/catswarm_cars:ro"
         --volume="${SCRIPT_DIR}/multidrone/airframes/10015_gazebo-classic_iris.post:/home/valentin/PX4-Autopilot/build/px4_sitl_default/etc/init.d-posix/airframes/10015_gazebo-classic_iris.post:ro"
         --volume="${SCRIPT_DIR}/Dockerfiles/models:/home/valentin/PX4-Autopilot/Tools/simulation/gazebo-classic/sitl_gazebo-classic/models/catswarm_host:ro"
     )
@@ -231,6 +239,12 @@ catswarm_append_docker_gpu
 # "Exception sending a multicast message: Network is unreachable" on hosts
 # with no working multicast route; after a while simulator_mavlink poll
 # timeouts freeze HIL (DISTANCE_SENSOR / OF / IMU stop → FLIG bottom_clearance=-1).
+if [ "${CATSWARM_YOLO_DET:-1}" = "1" ]; then
+    echo "Starting drone 1 camera window (YOLO boxes). Log: /tmp/yolo_det_bridge.log"
+    python3 "${SCRIPT_DIR}/multidrone/yolo_det_bridge.py" \
+        > /tmp/yolo_det_bridge.log 2>&1 &
+fi
+
 docker run -it --net=host \
            --cap-drop=all \
            --privileged \
@@ -240,6 +254,7 @@ docker run -it --net=host \
            --env="QT_X11_NO_MITSHM=1" \
            --env="CATSWARM_OF_MODE=${CATSWARM_OF_MODE:-mockup}" \
            --env="CATSWARM_VIO_CAM=${VIO_CAM}" \
+           --env="CATSWARM_YOLO_DET=${CATSWARM_YOLO_DET:-1}" \
            --env="CATSWARM_VIO_PITCH=${VIO_PITCH}" \
            --env="CATSWARM_WORLD=${WORLD}" \
            --env="CATSWARM_CYLINDER_RADIUS=${CYLINDER_RADIUS}" \

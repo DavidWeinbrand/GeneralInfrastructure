@@ -17,7 +17,7 @@ By default **`CATSWARM_SIM_GPU=auto`** adds Docker `--gpus all` and NVIDIA GL en
 
 Iris spawn order: jinja → `inject_iris_sensors.py` → `inject_iris_colors.py` → `gz model --spawn-file` → `bin/px4`. PX4 attaches `OPTICAL_FLOW_RAD` only when flow is already advertised inside `Sensors::init()`.
 
-`CATSWARM_OF_MODE` default `mockup`: inline lidar (min 0.02 m) plus a headless optical-flow plugin (body velocity + lidar). `camera` or `both` also nest `model://px4flow` (needs GL). `CATSWARM_VIO_CAM=1` (default) adds fixed-joint `vio_cam` (320×240, 10 cm forward). Look direction is the SDF pose `CATSWARM_VIO_PITCH` (default −90 FRD, Gazebo +π/2). `sim_vio.sh pitch` is a no-op: `gz joint` on `vio_cam_pitch` collapses the iris to the origin.
+`CATSWARM_OF_MODE` default `mockup`: inline lidar (min 0.02 m) plus a headless optical-flow plugin (body velocity + lidar). `camera` or `both` also nest `model://px4flow` (needs GL). `CATSWARM_VIO_CAM=1` (default) adds fixed-joint `vio_cam` (640×640 at 15 Hz, 10 cm forward). Look direction is the SDF pose `CATSWARM_VIO_PITCH` (default −90 FRD, Gazebo +π/2). `sim_vio.sh pitch` is a no-op: `gz joint` on `vio_cam_pitch` collapses the iris to the origin.
 
 `inject_iris_colors.py` paints `iris_N` with the ObservationBoard palette (`web/frontend/src/utils/droneColors.ts`, drone id `N`).
 

@@ -8,6 +8,8 @@ import socket
 import struct
 import threading
 
+# Match the Gazebo vio_cam <update_rate> in inject_iris_sensors.py.
+CAMERA_HZ = 15
 CAMERA_TCP_BASE = 5600
 JPEG_PREVIEW_BASE = 5700
 _SVOF_HDR = struct.Struct("<4sHHQI")
@@ -238,21 +240,19 @@ if __name__ == "__main__":
         )
 
         def gray_iter():
-            rate = rospy.Rate(10)
+            rate = rospy.Rate(CAMERA_HZ)
             while not rospy.is_shutdown():
                 if latest:
                     yield latest.pop()
-                else:
-                    rate.sleep()
+                rate.sleep()
 
         def jpeg_iter():
-            rate = rospy.Rate(10)
+            rate = rospy.Rate(CAMERA_HZ)
             while not rospy.is_shutdown():
                 if latest_rgb:
                     rgb, width, height = latest_rgb[0]
                     yield rgb_jpeg_bytes(rgb, width, height, encode=encode_fn)
-                else:
-                    rate.sleep()
+                rate.sleep()
 
         def jpeg_thread_fn():
             if encode_fn is None:
