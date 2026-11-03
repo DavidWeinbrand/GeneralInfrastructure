@@ -147,7 +147,7 @@ def test_inject_adds_vio_camera_and_keeps_of_lidar(tmp_path: Path):
     assert 'name="vio_cam_pitch"' in text
     assert "horizontal_fov>1.04719755" in text.replace(" ", "") or "1.04719755" in text
     assert "<width>640</width>" in text and "<height>640</height>" in text
-    assert "<update_rate>15</update_rate>" in text
+    assert "<update_rate>30</update_rate>" in text
     assert 'name="lidar_joint"' in text
     assert MOCKUP_PLUGIN_SO in text
     inject(sdf)

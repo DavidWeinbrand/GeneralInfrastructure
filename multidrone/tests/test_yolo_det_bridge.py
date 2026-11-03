@@ -11,7 +11,7 @@ from yolo_det_bridge import (  # noqa: E402
     DRONE1_DET_PORT,
     DRONE1_IMAGE_TOPIC,
     DRONE1_JPEG_URL,
-    CAMERA_HZ,
+    PREVIEW_HZ,
     WINDOW_NAME,
     YOLO_IMGSZ,
     YOLO_WEIGHTS,
@@ -27,7 +27,7 @@ def test_one_drone_constants():
     assert WINDOW_NAME == "Drone 1 camera"
     assert YOLO_WEIGHTS.endswith("visdrone_yolov8m.pt")
     assert YOLO_IMGSZ == 640
-    assert CAMERA_HZ == 15
+    assert PREVIEW_HZ == 30
 
 
 def test_frame_payload_is_detection_frame_v1():
@@ -65,12 +65,10 @@ def test_photo_cars_cover_the_field_and_miss_the_pads():
     from spawn_scan_cars import PAD_CLEAR_M, PADS_XY, car_spawns
 
     cars = car_spawns()
-    assert len(cars) == 24
+    assert len(cars) == 6
     assert {c["kind"] for c in cars} == {"hatchback", "pickup", "ambulance"}
-    assert min(c["x"] for c in cars) < -15
-    assert max(c["x"] for c in cars) > 15
-    assert min(c["y"] for c in cars) < -15
-    assert max(c["y"] for c in cars) > 15
+    assert max(c["x"] for c in cars) - min(c["x"] for c in cars) > 20
+    assert max(c["y"] for c in cars) - min(c["y"] for c in cars) > 20
     for car in cars:
         for px, py in PADS_XY:
             assert math.hypot(car["x"] - px, car["y"] - py) >= PAD_CLEAR_M

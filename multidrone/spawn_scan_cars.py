@@ -20,9 +20,12 @@ PAD_CLEAR_M = 4.0
 KINDS = ("hatchback", "pickup", "ambulance")
 OLD_MODELS = ("area_scan_cars", "car_under_cam")
 OVERHEAD_SUN = "overhead_sun"
+CAR_COUNT = 6
+# Earlier launches placed 24. Drop the extra names when this script runs again.
+PREVIOUS_CAR_COUNT = 24
 
 
-def car_spawns(count: int = 24, span: float = 30.0) -> list[dict]:
+def car_spawns(count: int = CAR_COUNT, span: float = 30.0) -> list[dict]:
     """Deterministic poses covering the field the drones actually fly."""
     rng = random.Random(11)
     poses: list[dict] = []
@@ -137,6 +140,8 @@ def main() -> int:
     poses = car_spawns()
     for pose in poses:
         delete_model(pose["name"])
+    for index in range(len(poses), PREVIOUS_CAR_COUNT):
+        delete_model(f"scan_car_{index}")
     tmp = Path("/tmp/scan_cars")
     tmp.mkdir(parents=True, exist_ok=True)
     failed = 0

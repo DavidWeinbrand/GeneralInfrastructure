@@ -19,8 +19,8 @@ WINDOW_NAME = "Drone 1 camera"
 # Native training size on this checkpoint is 1280; we run at the camera size.
 YOLO_WEIGHTS = str(Path(__file__).resolve().parent / "weights" / "visdrone_yolov8m.pt")
 YOLO_IMGSZ = 640
-# Match Gazebo vio_cam update_rate and vio_cam_tcp.CAMERA_HZ.
-CAMERA_HZ = 15
+# Operator window. Detection runs beside this and does not gate the picture.
+PREVIEW_HZ = 30
 
 
 def boxes_from_rows(xyxy, conf, cls, ids, names) -> list[dict]:
@@ -134,27 +134,32 @@ def ros_image_to_bgr(msg):
     raise RuntimeError(f"yolo_det_bridge: unsupported image encoding {encoding!r}")
 
 
-def _publish_and_show(model, image, sock, frame_id: int) -> int:
-    import time
-
+def _detect(model, image) -> list[dict]:
     try:
         results = model.track(image, persist=True, verbose=False, imgsz=YOLO_IMGSZ, conf=0.25)
-        boxes = boxes_from_result(results[0]) if results else []
+        return boxes_from_result(results[0]) if results else []
     except Exception as exc:
         print(f"yolo_det_bridge: track failed: {exc}", flush=True)
-        boxes = []
+        return []
+
+
+def _publish_boxes(sock, frame_id: int, boxes: list[dict]) -> int:
+    import time
+
     frame_id += 1
     payload = frame_payload(frame_id, time.monotonic(), boxes)
     sock.send_multipart([DETECTION_TOPIC, json.dumps(payload).encode("utf-8")])
-    annotated = draw_boxes(image, boxes)
-    try:
-        show_frame(annotated)
-    except Exception as exc:
-        print(f"yolo_det_bridge: camera window failed: {exc}", flush=True)
     if boxes:
         names = ",".join(f"{b['class_id']}:{b['score']:.2f}" for b in boxes)
         print(f"yolo_det_bridge: frame {frame_id} {names}", flush=True)
     return frame_id
+
+
+def _show(image, boxes: list[dict]) -> None:
+    try:
+        show_frame(draw_boxes(image, boxes))
+    except Exception as exc:
+        print(f"yolo_det_bridge: camera window failed: {exc}", flush=True)
 
 
 def _open_pub():
@@ -167,6 +172,7 @@ def _open_pub():
 
 
 def run_jpeg(url: str) -> None:
+    import threading
     import time
 
     from ultralytics import YOLO
@@ -186,17 +192,44 @@ def run_jpeg(url: str) -> None:
     model = YOLO(YOLO_WEIGHTS)
     sock = _open_pub()
     print(
-        f"yolo_det_bridge: window '{WINDOW_NAME}', {YOLO_WEIGHTS} at {CAMERA_HZ} fps, "
+        f"yolo_det_bridge: window '{WINDOW_NAME}', {YOLO_WEIGHTS} preview {PREVIEW_HZ} fps, "
         f"PUB {DETECTION_TOPIC.decode()} :{DRONE1_DET_PORT}",
         flush=True,
     )
-    frame_id = 0
-    while True:
-        nxt = fetch_jpeg(url)
-        if nxt is None:
-            time.sleep(0.05)
-            continue
-        frame_id = _publish_and_show(model, nxt, sock, frame_id)
+    lock = threading.Lock()
+    state = {"image": image, "seq": 1, "boxes": []}
+    stop = threading.Event()
+
+    def detect_loop() -> None:
+        frame_id = 0
+        seen = 0
+        while not stop.is_set():
+            with lock:
+                seq = state["seq"]
+                snap = None if seq == seen else state["image"].copy()
+            if snap is None:
+                time.sleep(0.005)
+                continue
+            seen = seq
+            boxes = _detect(model, snap)
+            frame_id = _publish_boxes(sock, frame_id, boxes)
+            with lock:
+                state["boxes"] = boxes
+
+    threading.Thread(target=detect_loop, name="yolo_det", daemon=True).start()
+    try:
+        while True:
+            nxt = fetch_jpeg(url)
+            if nxt is None:
+                time.sleep(0.02)
+                continue
+            with lock:
+                state["image"] = nxt
+                state["seq"] += 1
+                boxes = list(state["boxes"])
+            _show(nxt, boxes)
+    finally:
+        stop.set()
 
 
 def run_ros() -> None:
@@ -219,18 +252,48 @@ def run_ros() -> None:
     rospy.Subscriber(DRONE1_IMAGE_TOPIC, Image, on_img, queue_size=1)
     sock = _open_pub()
     print(
-        f"yolo_det_bridge: window '{WINDOW_NAME}', {YOLO_WEIGHTS} at {CAMERA_HZ} fps, "
+        f"yolo_det_bridge: window '{WINDOW_NAME}', {YOLO_WEIGHTS} preview {PREVIEW_HZ} fps, "
         f"SUB {DRONE1_IMAGE_TOPIC} PUB {DETECTION_TOPIC.decode()} :{DRONE1_DET_PORT}",
         flush=True,
     )
-    frame_id = 0
-    rate = rospy.Rate(CAMERA_HZ)
-    while not rospy.is_shutdown():
-        if not latest:
-            rate.sleep()
-            continue
-        frame_id = _publish_and_show(model, latest[0], sock, frame_id)
-        rate.sleep()
+    import threading
+
+    lock = threading.Lock()
+    state = {"image": None, "seq": 0, "boxes": []}
+    stop = threading.Event()
+
+    def detect_loop() -> None:
+        frame_id = 0
+        seen = 0
+        while not stop.is_set() and not rospy.is_shutdown():
+            with lock:
+                seq = state["seq"]
+                snap = None if seq == 0 or seq == seen or state["image"] is None else state["image"].copy()
+            if snap is None:
+                time.sleep(0.005)
+                continue
+            seen = seq
+            boxes = _detect(model, snap)
+            frame_id = _publish_boxes(sock, frame_id, boxes)
+            with lock:
+                state["boxes"] = boxes
+
+    threading.Thread(target=detect_loop, name="yolo_det", daemon=True).start()
+    period = 1.0 / PREVIEW_HZ
+    try:
+        while not rospy.is_shutdown():
+            if not latest:
+                time.sleep(period)
+                continue
+            image = latest[0]
+            with lock:
+                state["image"] = image
+                state["seq"] += 1
+                boxes = list(state["boxes"])
+            _show(image, boxes)
+            time.sleep(period)
+    finally:
+        stop.set()
 
 
 def main() -> None:

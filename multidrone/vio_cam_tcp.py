@@ -8,8 +8,10 @@ import socket
 import struct
 import threading
 
-# Match the Gazebo vio_cam <update_rate> in inject_iris_sensors.py.
+# Gazebo vio_cam update_rate is 30. The operator JPEG follows that.
+# The gray VIO stream stays slower: its Python conversion is the heavy copy.
 CAMERA_HZ = 15
+PREVIEW_HZ = 30
 CAMERA_TCP_BASE = 5600
 JPEG_PREVIEW_BASE = 5700
 _SVOF_HDR = struct.Struct("<4sHHQI")
@@ -22,6 +24,39 @@ def camera_tcp_port(drone_id: int) -> int:
 
 def jpeg_preview_port(drone_id: int) -> int:
     return JPEG_PREVIEW_BASE + (int(drone_id) - 1)
+
+
+def rgb_array_from_msg(msg):
+    """RGB uint8 array, or None when numpy cannot view this encoding."""
+    try:
+        import numpy as np
+    except ImportError:
+        return None
+    encoding = getattr(msg, "encoding", "") or ""
+    if encoding not in ("rgb8", "bgr8"):
+        return None
+    width = int(msg.width)
+    height = int(msg.height)
+    step = int(getattr(msg, "step", 0) or width * 3)
+    raw = np.frombuffer(bytes(msg.data), dtype=np.uint8)
+    if step == width * 3:
+        arr = raw.reshape((height, width, 3))
+    else:
+        rows = [raw[y * step : y * step + width * 3].reshape((width, 3)) for y in range(height)]
+        arr = np.stack(rows, axis=0)
+    if encoding == "bgr8":
+        arr = arr[:, :, ::-1]
+    return np.ascontiguousarray(arr)
+
+
+def jpeg_bytes_from_rgb_array(arr) -> bytes:
+    import cv2
+
+    bgr = arr[:, :, ::-1]
+    ok, buf = cv2.imencode(".jpg", bgr)
+    if not ok:
+        raise RuntimeError("no JPEG encoder")
+    return buf.tobytes()
 
 
 def rgb_to_gray(rgb: bytes, width: int, height: int) -> bytes:
@@ -226,11 +261,21 @@ if __name__ == "__main__":
         def on_img(msg):
             stamp = msg.header.stamp
             t_ns = int(stamp.to_nsec()) if stamp else 0
-            rgb = _image_to_rgb(msg)
             width = int(msg.width)
             height = int(msg.height)
+            arr = rgb_array_from_msg(msg)
+            if arr is not None:
+                import numpy as np
+
+                gray = (
+                    0.299 * arr[:, :, 0] + 0.587 * arr[:, :, 1] + 0.114 * arr[:, :, 2]
+                ).astype(np.uint8)
+                latest[:] = [(width, height, t_ns, gray.tobytes())]
+                latest_rgb[:] = [(arr, width, height, t_ns)]
+                return
+            rgb = _image_to_rgb(msg)
             latest[:] = [(width, height, t_ns, rgb_to_gray(rgb, width, height))]
-            latest_rgb[:] = [(rgb, width, height)]
+            latest_rgb[:] = [(rgb, width, height, t_ns)]
 
         rospy.Subscriber(
             f"/iris_{drone_id}/vio_cam/image_raw",
@@ -246,18 +291,46 @@ if __name__ == "__main__":
                     yield latest.pop()
                 rate.sleep()
 
-        def jpeg_iter():
-            rate = rospy.Rate(CAMERA_HZ)
+        latest_jpeg = {"body": None, "t": None}
+
+        def encode_preview():
+            import time
+            period = 1.0 / PREVIEW_HZ
+            last_t = None
             while not rospy.is_shutdown():
-                if latest_rgb:
-                    rgb, width, height = latest_rgb[0]
-                    yield rgb_jpeg_bytes(rgb, width, height, encode=encode_fn)
-                rate.sleep()
+                started = time.monotonic()
+                frame = latest_rgb[0] if latest_rgb else None
+                if frame is not None:
+                    rgb, width, height, t_ns = frame
+                    if t_ns != last_t:
+                        if not isinstance(rgb, (bytes, bytearray)):
+                            body = jpeg_bytes_from_rgb_array(rgb)
+                        else:
+                            body = rgb_jpeg_bytes(rgb, width, height, encode=encode_fn)
+                        latest_jpeg["body"] = body
+                        latest_jpeg["t"] = t_ns
+                        last_t = t_ns
+                remain = period - (time.monotonic() - started)
+                if remain > 0:
+                    time.sleep(remain)
+
+        def jpeg_iter():
+            import time
+            last = None
+            while not rospy.is_shutdown():
+                body = latest_jpeg["body"]
+                stamp = latest_jpeg["t"]
+                if body is None or stamp == last:
+                    time.sleep(0.002)
+                    continue
+                last = stamp
+                yield body
 
         def jpeg_thread_fn():
             if encode_fn is None:
                 logging.warning("no JPEG encoder; preview disabled")
                 return
+            threading.Thread(target=encode_preview, daemon=True).start()
             serve_latest_jpeg(drone_id, bind_fn=_default_bind, jpeg_iter=jpeg_iter())
 
         threading.Thread(target=jpeg_thread_fn, daemon=True).start()

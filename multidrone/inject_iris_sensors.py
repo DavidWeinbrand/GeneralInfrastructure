@@ -140,7 +140,7 @@ def vio_cam_snippet(pitch_deg: float | None = None) -> str:
           </inertia>
         </inertial>
         <sensor name="camera" type="camera">
-          <update_rate>15</update_rate>
+          <update_rate>30</update_rate>
           <camera>
             <horizontal_fov>1.04719755</horizontal_fov>
             <image>
