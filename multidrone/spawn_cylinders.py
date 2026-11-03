@@ -16,11 +16,11 @@ COLOR_RGB: dict[str, tuple[float, float, float]] = {
     "yellow": (1, 1, 0),
 }
 
-_EMPTY_WORLDS = frozenset({"empty", "cylinders"})
+_EMPTY_WORLDS = frozenset({"empty", "cylinders", "static_cars"})
 
 
 def is_procedural_world(name: str) -> bool:
-    return name == "cylinders"
+    return name in ("cylinders", "static_cars")
 
 
 def gz_world_name(world: str) -> str:

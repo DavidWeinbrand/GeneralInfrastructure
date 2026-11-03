@@ -12,6 +12,7 @@ function cleanup() {
 	pkill gzserver
 	pkill -f vio_cam_tcp.py || true
 	pkill -f yolo_det_bridge.py || true
+	pkill -f "spawn_scan_cars.py --drive-circle" || true
 	if [ "${ROSCORE_OWNED:-0}" = "1" ]; then
 		pkill -x roscore || true
 	fi
@@ -118,7 +119,7 @@ done
 num_vehicles=${NUM_VEHICLES:=3}
 world=${WORLD:=empty}
 gz_world="$world"
-if [ "$world" = "cylinders" ]; then
+if [ "$world" = "cylinders" ] || [ "$world" = "static_cars" ]; then
 	gz_world="empty"
 fi
 target=${TARGET:=px4_sitl_default}
@@ -150,6 +151,10 @@ sleep 1
 source ${src_path}/Tools/simulation/gazebo-classic/setup_gazebo.bash ${src_path} ${src_path}/build/${target}
 
 export GAZEBO_MODEL_PATH="${GAZEBO_MODEL_PATH}:/home/valentin/PX4-Autopilot/Tools/simulation/gazebo-classic/sitl_gazebo-classic/models/catswarm_host:/home/valentin/PX4-Autopilot/Tools/simulation/gazebo-classic/sitl_gazebo-classic/models/catswarm_cars"
+if [ "${CATSWARM_WORLD:-}" = "citysim" ]; then
+	export GAZEBO_MODEL_PATH="/opt/citysim/models:/opt/gazebo_models:${GAZEBO_MODEL_PATH}"
+	export GAZEBO_RESOURCE_PATH="/opt/citysim${GAZEBO_RESOURCE_PATH:+:$GAZEBO_RESOURCE_PATH}"
+fi
 
 # ROS2: gazebo_ros init/factory. ROS1 (Noetic): API plugin so model camera
 # plugins can advertise. Start roscore only when the master is down.
@@ -204,6 +209,13 @@ if [ -n "${POSITIONS_FILE}" ]; then
 		fi
 		line_num=$((line_num + 1))
 	done < "${POSITIONS_FILE}"
+	# CitySim streets sit about 5 m above the Gazebo origin. The pad file
+	# has no altitude, so lift the drones onto the roads.
+	if [ "${CATSWARM_WORLD:-$world}" = "citysim" ]; then
+		for i in "${!positions_z[@]}"; do
+			positions_z[$i]=8
+		done
+	fi
 	echo "Loaded ${#positions_x[@]} positions from file"
 	# Automatically set num_vehicles to number of positions if -n was not explicitly provided
 	if [ "$NUM_VEHICLES_SET" = "false" ]; then
@@ -296,6 +308,10 @@ if [ "${CATSWARM_YOLO_DET:-1}" = "1" ]; then
 	SPAWN_CARS="${SPAWN_SCAN_CARS:-$SCRIPT_DIR/spawn_scan_cars.py}"
 	if [ -f "$SPAWN_CARS" ]; then
 		python3 "$SPAWN_CARS" || echo "WARNING: area-scan cars were not spawned"
+		# CitySim already contains its own cars and walking people.
+		if [ "${CATSWARM_WORLD:-}" != "citysim" ] && [ "${CATSWARM_WORLD:-}" != "static_cars" ]; then
+			python3 "$SPAWN_CARS" --drive-circle >/tmp/scan_car_circle.log 2>&1 &
+		fi
 	else
 		echo "WARNING: $SPAWN_CARS missing — no Gazebo cars"
 	fi

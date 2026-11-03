@@ -51,3 +51,10 @@ def test_runsim_cylinders_is_empty_like_and_has_radius_flag():
     sitl = SITL.read_text()
     assert "spawn_cylinders" in sitl
     assert "CATSWARM_WORLD" in sitl
+    assert '!= "citysim"' in sitl
+    city = ROOT / "multidrone" / "worlds" / "citysim"
+    assert (city / "citysim.world").is_file()
+    assert "model://city_terrain" in (city / "citysim.world").read_text()
+    assert (ROOT / "multidrone" / "vendor" / "citysim" / "models" / "city_terrain" / "model.config").is_file()
+    assert (ROOT / "multidrone" / "vendor" / "gazebo_models" / "house_1" / "model.config").is_file()
+    assert '"lat"' in (city / "origin.json").read_text()

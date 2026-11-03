@@ -30,6 +30,7 @@ def test_world_helpers():
     assert is_procedural_world("empty") is False
     assert is_procedural_world("teradyon") is False
     assert gz_world_name("cylinders") == "empty"
+    assert gz_world_name("static_cars") == "empty"
     assert gz_world_name("empty") == "empty"
     assert gz_world_name("teradyon") == "teradyon"
 

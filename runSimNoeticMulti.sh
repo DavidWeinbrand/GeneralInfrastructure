@@ -134,8 +134,14 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-if [[ "$WORLD" != "empty" && "$WORLD" != "cylinders" ]]; then
-    HOST_MODELS="${SCRIPT_DIR}/Dockerfiles/models"
+if [[ "$WORLD" != "empty" && "$WORLD" != "cylinders" && "$WORLD" != "static_cars" ]]; then
+    HOST_MODELS=""
+    for candidate in "${SCRIPT_DIR}/Dockerfiles/models" "${SCRIPT_DIR}/multidrone/worlds"; do
+        if [[ -f "${candidate}/${WORLD}/${WORLD}.world" && -f "${candidate}/${WORLD}/origin.json" ]]; then
+            HOST_MODELS="$candidate"
+            break
+        fi
+    done
     WORLD_FILE="${HOST_MODELS}/${WORLD}/${WORLD}.world"
     ORIGIN_FILE="${HOST_MODELS}/${WORLD}/origin.json"
     if [[ ! -f "$WORLD_FILE" || ! -f "$ORIGIN_FILE" ]]; then
@@ -192,6 +198,8 @@ if [ "$POSITIONS_FILE" = "$DEFAULT_POSITIONS" ]; then
         --volume="${SCRIPT_DIR}/multidrone/gazebo_models:/home/valentin/PX4-Autopilot/Tools/simulation/gazebo-classic/sitl_gazebo-classic/models/catswarm_cars:ro"
         --volume="${SCRIPT_DIR}/multidrone/airframes/10015_gazebo-classic_iris.post:/home/valentin/PX4-Autopilot/build/px4_sitl_default/etc/init.d-posix/airframes/10015_gazebo-classic_iris.post:ro"
         --volume="${SCRIPT_DIR}/Dockerfiles/models:/home/valentin/PX4-Autopilot/Tools/simulation/gazebo-classic/sitl_gazebo-classic/models/catswarm_host:ro"
+        --volume="${SCRIPT_DIR}/multidrone/vendor/citysim:/opt/citysim:ro"
+        --volume="${SCRIPT_DIR}/multidrone/vendor/gazebo_models:/opt/gazebo_models:ro"
     )
 else
     # Use custom positions file
@@ -211,6 +219,8 @@ else
         --volume="${SCRIPT_DIR}/multidrone/gazebo_models:/home/valentin/PX4-Autopilot/Tools/simulation/gazebo-classic/sitl_gazebo-classic/models/catswarm_cars:ro"
         --volume="${SCRIPT_DIR}/multidrone/airframes/10015_gazebo-classic_iris.post:/home/valentin/PX4-Autopilot/build/px4_sitl_default/etc/init.d-posix/airframes/10015_gazebo-classic_iris.post:ro"
         --volume="${SCRIPT_DIR}/Dockerfiles/models:/home/valentin/PX4-Autopilot/Tools/simulation/gazebo-classic/sitl_gazebo-classic/models/catswarm_host:ro"
+        --volume="${SCRIPT_DIR}/multidrone/vendor/citysim:/opt/citysim:ro"
+        --volume="${SCRIPT_DIR}/multidrone/vendor/gazebo_models:/opt/gazebo_models:ro"
     )
 fi
 
@@ -220,7 +230,7 @@ if [ -f "$XAUTH_FILE" ]; then
 fi
 
 PX4_HOME_ENV=()
-if [[ "$WORLD" != "empty" && "$WORLD" != "cylinders" ]]; then
+if [[ "$WORLD" != "empty" && "$WORLD" != "cylinders" && "$WORLD" != "static_cars" ]]; then
     DOCKER_VOLUMES+=(--volume="${WORLD_FILE}:/home/valentin/PX4-Autopilot/Tools/simulation/gazebo-classic/sitl_gazebo-classic/worlds/${WORLD}.world:ro")
     PX4_HOME_ENV=(
         --env="PX4_HOME_LAT=${PX4_HOME_LAT}"
