@@ -1,25 +1,27 @@
 #!/usr/bin/env python3
 """One YOLO process for drone 1.
 
-Subscribes to /iris_1/vio_cam/image_raw and publishes DetectionFrame_v1 on
-port 7753 (drone 1, zmqCommPort 7701 + 52). No drone-count argument and no
-second model. The system manager does not know this process is YOLO.
+Reads the drone 1 camera preview and publishes DetectionFrame_v1 on port 7753
+(drone 1, zmqCommPort 7701 + 52). Weights: project default visdrone-yolo11s
+(see ``yolo_config.py``).
 """
 from __future__ import annotations
 
 import json
 from pathlib import Path
 
+from yolo_config import (
+    DEFAULT_YOLO_WEIGHTS,
+    YOLO_IMGSZ,
+    resolve_yolo_weights,
+)
+
 DRONE1_IMAGE_TOPIC = "/iris_1/vio_cam/image_raw"
 DRONE1_JPEG_URL = "http://127.0.0.1:5700"
 DRONE1_DET_PORT = 7753
 DETECTION_TOPIC = b"DETECTION_FRAME"
 WINDOW_NAME = "Drone 1 camera"
-# YOLOv8m fine-tuned on VisDrone: real drone footage, class "car" included.
-# Native training size on this checkpoint is 1280; we run at the camera size.
-YOLO_WEIGHTS = str(Path(__file__).resolve().parent / "weights" / "visdrone_yolov8m.pt")
-YOLO_IMGSZ = 640
-# Operator window. Detection runs beside this and does not gate the picture.
+YOLO_WEIGHTS = str(DEFAULT_YOLO_WEIGHTS)
 PREVIEW_HZ = 30
 
 
@@ -171,7 +173,7 @@ def _open_pub():
     return sock
 
 
-def run_jpeg(url: str) -> None:
+def run_jpeg(url: str, weights_path: str) -> None:
     import threading
     import time
 
@@ -189,10 +191,11 @@ def run_jpeg(url: str) -> None:
             time.sleep(0.5)
     if image is None:
         raise SystemExit(f"yolo_det_bridge: no camera JPEG from {url}")
-    model = YOLO(YOLO_WEIGHTS)
+    model = YOLO(weights_path)
     sock = _open_pub()
     print(
-        f"yolo_det_bridge: window '{WINDOW_NAME}', {YOLO_WEIGHTS} preview {PREVIEW_HZ} fps, "
+        f"yolo_det_bridge: window '{WINDOW_NAME}', weights={weights_path} "
+        f"preview {PREVIEW_HZ} fps, "
         f"PUB {DETECTION_TOPIC.decode()} :{DRONE1_DET_PORT}",
         flush=True,
     )
@@ -232,7 +235,7 @@ def run_jpeg(url: str) -> None:
         stop.set()
 
 
-def run_ros() -> None:
+def run_ros(weights_path: str) -> None:
     import time
 
     import rospy
@@ -240,7 +243,7 @@ def run_ros() -> None:
     from ultralytics import YOLO
 
     rospy.init_node("yolo_det_bridge_drone1", anonymous=True)
-    model = YOLO(YOLO_WEIGHTS)
+    model = YOLO(weights_path)
     latest: list = []
 
     def on_img(msg) -> None:
@@ -252,7 +255,8 @@ def run_ros() -> None:
     rospy.Subscriber(DRONE1_IMAGE_TOPIC, Image, on_img, queue_size=1)
     sock = _open_pub()
     print(
-        f"yolo_det_bridge: window '{WINDOW_NAME}', {YOLO_WEIGHTS} preview {PREVIEW_HZ} fps, "
+        f"yolo_det_bridge: window '{WINDOW_NAME}', weights={weights_path} "
+        f"preview {PREVIEW_HZ} fps, "
         f"SUB {DRONE1_IMAGE_TOPIC} PUB {DETECTION_TOPIC.decode()} :{DRONE1_DET_PORT}",
         flush=True,
     )
@@ -307,6 +311,11 @@ def main() -> None:
         help="Drone 1 color preview (vio_cam_tcp). This is the host-side default.",
     )
     parser.add_argument(
+        "--weights",
+        default=None,
+        help=f"Ultralytics .pt (default: {DEFAULT_YOLO_WEIGHTS.name}, HF dronefreak/visdrone-yolo11s).",
+    )
+    parser.add_argument(
         "--ros",
         action="store_true",
         help="Subscribe to /iris_1/vio_cam/image_raw instead of the JPEG preview.",
@@ -323,10 +332,11 @@ def main() -> None:
             file=sys.stderr,
         )
         raise SystemExit(1) from exc
+    weights_path = resolve_yolo_weights(args.weights)
     if args.ros:
-        run_ros()
+        run_ros(weights_path)
     else:
-        run_jpeg(args.jpeg_url)
+        run_jpeg(args.jpeg_url, weights_path)
 
 
 if __name__ == "__main__":

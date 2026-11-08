@@ -18,14 +18,16 @@ from yolo_det_bridge import (  # noqa: E402
     boxes_from_rows,
     frame_payload,
 )
+from yolo_config import HF_YOLO_REPO_ID  # noqa: E402
 
 
-def test_one_drone_constants():
+def test_project_default_yolo():
+    assert HF_YOLO_REPO_ID == "dronefreak/visdrone-yolo11s"
+    assert YOLO_WEIGHTS.endswith("visdrone_yolo11s.pt")
     assert DRONE1_IMAGE_TOPIC == "/iris_1/vio_cam/image_raw"
     assert DRONE1_JPEG_URL == "http://127.0.0.1:5700"
     assert DRONE1_DET_PORT == 7753
     assert WINDOW_NAME == "Drone 1 camera"
-    assert YOLO_WEIGHTS.endswith("visdrone_yolov8m.pt")
     assert YOLO_IMGSZ == 640
     assert PREVIEW_HZ == 30
 

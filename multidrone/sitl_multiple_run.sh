@@ -153,8 +153,33 @@ source ${src_path}/Tools/simulation/gazebo-classic/setup_gazebo.bash ${src_path}
 export GAZEBO_MODEL_PATH="${GAZEBO_MODEL_PATH}:/home/valentin/PX4-Autopilot/Tools/simulation/gazebo-classic/sitl_gazebo-classic/models/catswarm_host:/home/valentin/PX4-Autopilot/Tools/simulation/gazebo-classic/sitl_gazebo-classic/models/catswarm_cars"
 if [ "${CATSWARM_WORLD:-}" = "citysim" ]; then
 	export GAZEBO_MODEL_PATH="/opt/citysim/models:/opt/gazebo_models:${GAZEBO_MODEL_PATH}"
-	export GAZEBO_RESOURCE_PATH="/opt/citysim${GAZEBO_RESOURCE_PATH:+:$GAZEBO_RESOURCE_PATH}"
+	export GAZEBO_RESOURCE_PATH="${GAZEBO_RESOURCE_PATH}:/opt/citysim:/opt/citysim/worlds"
+	# setup_gazebo.bash resets this to models.gazebosim.org; override after so startup
+	# does not block on the online model catalog (all citysim props are local).
+	export GAZEBO_MODEL_DATABASE_URI="http://127.0.0.1:1"
+	# Optional: built citysim plugins (Joy, traffic lights) under /opt/citysim/lib or install prefix.
+	for _citysim_plugin_dir in /opt/citysim/lib /opt/citysim/build/plugins; do
+		if [ -d "${_citysim_plugin_dir}" ]; then
+			export GAZEBO_PLUGIN_PATH="${_citysim_plugin_dir}${GAZEBO_PLUGIN_PATH:+:$GAZEBO_PLUGIN_PATH}"
+		fi
+	done
 fi
+
+wait_for_gazebo_world() {
+	echo "Waiting for Gazebo world to load..."
+	local i=0
+	local max_wait=180
+	while [ "$i" -lt "$max_wait" ]; do
+		if rosservice list 2>/dev/null | grep -q '/gazebo/set_physics_properties'; then
+			echo "Gazebo world ready (${i}s)"
+			return 0
+		fi
+		sleep 1
+		i=$((i + 1))
+	done
+	echo "WARNING: Gazebo world not ready after ${max_wait}s — continuing spawn anyway"
+	return 1
+}
 
 # ROS2: gazebo_ros init/factory. ROS1 (Noetic): API plugin so model camera
 # plugins can advertise. Start roscore only when the master is down.
@@ -183,7 +208,7 @@ if [ -d "${GAZEBO11_PLUGINS}" ]; then
 	export LD_LIBRARY_PATH="${GAZEBO11_PLUGINS}${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 fi
 gzserver ${src_path}/Tools/simulation/gazebo-classic/sitl_gazebo-classic/worlds/${gz_world}.world --verbose $ros_args &
-sleep 5
+wait_for_gazebo_world
 
 # Read positions from file if provided
 declare -a positions_x

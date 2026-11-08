@@ -60,11 +60,12 @@ while [[ $# -gt 0 ]]; do
             echo "  --kill                   Clean up/kill existing simulation containers and processes"
             echo "  --num=N, --num N         Number of drones to spawn (default: 1)"
             echo "  --file=PATH, --file PATH Path to positions file (default: multidrone/positions.txt)"
-            echo "  --world=NAME, --world NAME  Gazebo world (default: empty). Host maps in Dockerfiles/models/NAME/"
+            echo "  --world=NAME, --world NAME  Gazebo world (default: empty). Host maps: Dockerfiles/models/NAME/ or multidrone/worlds/NAME/. citysim uses osrf/citysim (vendor/citysim, simple_city.world)."
             echo "  --cylinder-radius=R, --cylinder-radius R  Cylinders disk radius meters (default: 10)"
             echo "  --vio-cam=0|1, --vio-cam 0|1  Inject Gazebo VIO camera + vio_cam_tcp (default: 1)"
             echo "  --vio-pitch=DEG, --vio-pitch DEG  FRD camera pitch degrees [-90, 0] baked into iris SDF (default: -90)"
             echo "  Env CATSWARM_YOLO_DET=0|1     Spawn scan cars and open the Drone 1 camera window (default: 1)"
+            echo "  Env CATSWARM_YOLO_WEIGHTS     Default: multidrone/weights/visdrone_yolo11s.pt (HF dronefreak/visdrone-yolo11s)"
             echo "  Env CATSWARM_SIM_GPU=auto|on|off  NVIDIA GPU for Gazebo in Docker (default: auto)"
             echo ""
             exit 0
@@ -144,6 +145,9 @@ if [[ "$WORLD" != "empty" && "$WORLD" != "cylinders" && "$WORLD" != "static_cars
     done
     WORLD_FILE="${HOST_MODELS}/${WORLD}/${WORLD}.world"
     ORIGIN_FILE="${HOST_MODELS}/${WORLD}/origin.json"
+    if [[ -L "$WORLD_FILE" ]]; then
+        WORLD_FILE="$(readlink -f "$WORLD_FILE")"
+    fi
     if [[ ! -f "$WORLD_FILE" || ! -f "$ORIGIN_FILE" ]]; then
         echo "World '${WORLD}' not found (need ${WORLD_FILE} and origin.json)."
         echo "Generate it first, e.g.:"
@@ -194,6 +198,7 @@ if [ "$POSITIONS_FILE" = "$DEFAULT_POSITIONS" ]; then
         --volume="${SCRIPT_DIR}/multidrone/spawn_cylinders.py:/home/valentin/PX4-Autopilot/Tools/simulation/gazebo-classic/spawn_cylinders.py:ro"
         --volume="${SCRIPT_DIR}/multidrone/spawn_scan_polygon.py:/home/valentin/PX4-Autopilot/Tools/simulation/gazebo-classic/spawn_scan_polygon.py:ro"
         --volume="${SCRIPT_DIR}/multidrone/spawn_scan_cars.py:/home/valentin/PX4-Autopilot/Tools/simulation/gazebo-classic/spawn_scan_cars.py:ro"
+        --volume="${SCRIPT_DIR}/multidrone/yolo_config.py:/home/valentin/PX4-Autopilot/Tools/simulation/gazebo-classic/yolo_config.py:ro"
         --volume="${SCRIPT_DIR}/multidrone/yolo_det_bridge.py:/home/valentin/PX4-Autopilot/Tools/simulation/gazebo-classic/yolo_det_bridge.py:ro"
         --volume="${SCRIPT_DIR}/multidrone/gazebo_models:/home/valentin/PX4-Autopilot/Tools/simulation/gazebo-classic/sitl_gazebo-classic/models/catswarm_cars:ro"
         --volume="${SCRIPT_DIR}/multidrone/airframes/10015_gazebo-classic_iris.post:/home/valentin/PX4-Autopilot/build/px4_sitl_default/etc/init.d-posix/airframes/10015_gazebo-classic_iris.post:ro"
@@ -215,6 +220,7 @@ else
         --volume="${SCRIPT_DIR}/multidrone/spawn_cylinders.py:/home/valentin/PX4-Autopilot/Tools/simulation/gazebo-classic/spawn_cylinders.py:ro"
         --volume="${SCRIPT_DIR}/multidrone/spawn_scan_polygon.py:/home/valentin/PX4-Autopilot/Tools/simulation/gazebo-classic/spawn_scan_polygon.py:ro"
         --volume="${SCRIPT_DIR}/multidrone/spawn_scan_cars.py:/home/valentin/PX4-Autopilot/Tools/simulation/gazebo-classic/spawn_scan_cars.py:ro"
+        --volume="${SCRIPT_DIR}/multidrone/yolo_config.py:/home/valentin/PX4-Autopilot/Tools/simulation/gazebo-classic/yolo_config.py:ro"
         --volume="${SCRIPT_DIR}/multidrone/yolo_det_bridge.py:/home/valentin/PX4-Autopilot/Tools/simulation/gazebo-classic/yolo_det_bridge.py:ro"
         --volume="${SCRIPT_DIR}/multidrone/gazebo_models:/home/valentin/PX4-Autopilot/Tools/simulation/gazebo-classic/sitl_gazebo-classic/models/catswarm_cars:ro"
         --volume="${SCRIPT_DIR}/multidrone/airframes/10015_gazebo-classic_iris.post:/home/valentin/PX4-Autopilot/build/px4_sitl_default/etc/init.d-posix/airframes/10015_gazebo-classic_iris.post:ro"
@@ -250,7 +256,14 @@ catswarm_append_docker_gpu
 # with no working multicast route; after a while simulator_mavlink poll
 # timeouts freeze HIL (DISTANCE_SENSOR / OF / IMU stop → FLIG bottom_clearance=-1).
 if [ "${CATSWARM_YOLO_DET:-1}" = "1" ]; then
-    echo "Starting drone 1 camera window (YOLO boxes). Log: /tmp/yolo_det_bridge.log"
+    pkill -f "yolo_det_bridge.py" 2>/dev/null || true
+    sleep 0.3
+    _default_yolo_weights="$(
+        python3 -c "import sys; sys.path.insert(0, '${SCRIPT_DIR}/multidrone'); from yolo_config import DEFAULT_YOLO_WEIGHTS; print(DEFAULT_YOLO_WEIGHTS)"
+    )"
+    export CATSWARM_YOLO_WEIGHTS="${CATSWARM_YOLO_WEIGHTS:-${_default_yolo_weights}}"
+    echo "Starting drone 1 camera + YOLO (visdrone-yolo11s). Weights: ${CATSWARM_YOLO_WEIGHTS}"
+    echo "  Log: /tmp/yolo_det_bridge.log"
     python3 "${SCRIPT_DIR}/multidrone/yolo_det_bridge.py" \
         > /tmp/yolo_det_bridge.log 2>&1 &
 fi

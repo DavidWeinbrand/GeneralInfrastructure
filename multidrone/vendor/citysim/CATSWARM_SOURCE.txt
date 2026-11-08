@@ -1,0 +1,5 @@
+Upstream: https://github.com/osrf/citysim.git
+Ref: master
+Commit: 3928b08e2598f5ead2e9b24640fe1bde262a136d
+Synced: 2026-11-04T16:01:59Z
+World used in sim: worlds/citysim/citysim.world -> vendor/citysim/worlds/simple_city.world

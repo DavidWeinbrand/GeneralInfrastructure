@@ -54,7 +54,11 @@ def test_runsim_cylinders_is_empty_like_and_has_radius_flag():
     assert '!= "citysim"' in sitl
     city = ROOT / "multidrone" / "worlds" / "citysim"
     assert (city / "citysim.world").is_file()
-    assert "model://city_terrain" in (city / "citysim.world").read_text()
+    assert (city / "citysim_sitl.world").is_file()
+    sitl_world = (city / "citysim_sitl.world").read_text()
+    assert "model://city_terrain" in sitl_world
+    assert "<real_time_update_rate>500</real_time_update_rate>" in sitl_world
+    assert "<real_time_update_rate>0</real_time_update_rate>" not in sitl_world
     assert (ROOT / "multidrone" / "vendor" / "citysim" / "models" / "city_terrain" / "model.config").is_file()
     assert (ROOT / "multidrone" / "vendor" / "gazebo_models" / "house_1" / "model.config").is_file()
     assert '"lat"' in (city / "origin.json").read_text()
