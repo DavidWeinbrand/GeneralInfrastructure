@@ -1,8 +1,8 @@
-# YOLO weights (not in git)
+# YOLO weights
 
 Area-scan sim detection uses **[dronefreak/visdrone-yolo11s](https://huggingface.co/dronefreak/visdrone-yolo11s)** (VisDrone, YOLO11s).
 
-Place the checkpoint here as **`visdrone_yolo11s.pt`** (~19 MB), or let `yolo_det_bridge.py` download `best.pt` from Hugging Face on first run (needs `huggingface_hub`).
+**`visdrone_yolo11s.pt`** (~19 MB) is tracked on `feature/pluggable-area-scan` so a fresh clone can run YOLO without a download. On other branches, place the checkpoint here or let `yolo_det_bridge.py` download `best.pt` from Hugging Face on first run (needs `huggingface_hub`).
 
 Manual download:
 
