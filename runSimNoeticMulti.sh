@@ -135,6 +135,15 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+if ! docker info >/dev/null 2>&1; then
+    echo "[catswarm-sim] ERROR: Docker is not accessible. Check the Docker service and your docker group membership." >&2
+    exit 1
+fi
+if ! docker image inspect "${CONTAINER_NAME}:latest" >/dev/null 2>&1; then
+    echo "[catswarm-sim] ERROR: Simulator image ${CONTAINER_NAME}:latest is not installed. Build or load it before starting." >&2
+    exit 1
+fi
+
 if [[ "$WORLD" != "empty" && "$WORLD" != "cylinders" && "$WORLD" != "static_cars" ]]; then
     HOST_MODELS=""
     for candidate in "${SCRIPT_DIR}/Dockerfiles/models" "${SCRIPT_DIR}/multidrone/worlds"; do
@@ -264,7 +273,12 @@ if [ "${CATSWARM_YOLO_DET:-1}" = "1" ]; then
     export CATSWARM_YOLO_WEIGHTS="${CATSWARM_YOLO_WEIGHTS:-${_default_yolo_weights}}"
     echo "Starting drone 1 camera + YOLO (visdrone-yolo11s). Weights: ${CATSWARM_YOLO_WEIGHTS}"
     echo "  Log: /tmp/yolo_det_bridge.log"
-    python3 "${SCRIPT_DIR}/multidrone/yolo_det_bridge.py" \
+    # System python3 has no cv2/ultralytics; use the project venv like hardware_adapter_multi.sh.
+    YOLO_PYTHON="${PYTHON:-python3}"
+    if [ "$YOLO_PYTHON" = "python3" ] && [ -x "${SCRIPT_DIR}/../venv/bin/python" ]; then
+        YOLO_PYTHON="${SCRIPT_DIR}/../venv/bin/python"
+    fi
+    "$YOLO_PYTHON" "${SCRIPT_DIR}/multidrone/yolo_det_bridge.py" \
         > /tmp/yolo_det_bridge.log 2>&1 &
 fi
 

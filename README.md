@@ -13,7 +13,26 @@ Images live in `Dockerfiles/` (nested `PX4dockerfiles`, PX4 **v1.17.0**):
 
 `runSimNoeticMulti.sh` (`--num`, `--file`, `--world`, `--cylinder-radius`, `--vio-cam`, `--vio-pitch`, `--kill`) bind-mounts the inject scripts and `multidrone/airframes/10015_gazebo-classic_iris.post`, then runs `multidrone/sitl_multiple_run.sh`. Gazebo is pinned to loopback (`GAZEBO_IP=127.0.0.1`, `GAZEBO_MASTER_URI=http://127.0.0.1:11345`). A missing non-empty world exits before the cleanup trap (a running sim is left alone).
 
+The launcher checks Docker access and the local simulator image before cleanup.
+The drone 1 YOLO bridge runs with the project `venv` Python (the system `python3`
+has no `cv2`/`ultralytics`); set `PYTHON=` to override.
+
+For this host, `px4-noetic-sim-ros:latest` was built with PX4 `v1.17.0` using
+`CatsSwarm/PX4dockerfiles` branch `SimGazebo`, revision
+`301ba4ce908d1c4aaacdfd76a634bce28390b4f3`, in a separate build context.
+This does not replace the recorded nested Dockerfiles gitlink. The resulting
+image was verified by launching five iris models and a visible Gazebo client.
+
 By default **`CATSWARM_SIM_GPU=auto`** adds Docker `--gpus all` and NVIDIA GL env when `nvidia-smi` and the Docker nvidia runtime are present (typical laptop dGPU). Set `CATSWARM_SIM_GPU=off` to force software/Intel GL via X11 only, or `on` to require GPU passthrough.
+
+On this RTX A1000 host, the recommended `nvidia-driver-595-open` and NVIDIA
+Container Toolkit are installed, and Docker's NVIDIA runtime is configured.
+Reboot after driver installation to replace the previously active nouveau
+driver, then start a new simulation container. An existing container does not
+gain GPU access when the driver or runtime is installed. Check `nvidia-smi`
+on the host and `docker exec px4-noetic-sim-ros glxinfo -B` for an NVIDIA
+renderer (not `llvmpipe`). GPU launches include the `display` capability needed
+for X11 alongside graphics, compute, and utility support.
 
 Iris spawn order: jinja → `inject_iris_sensors.py` → `inject_iris_colors.py` → `gz model --spawn-file` → `bin/px4`. PX4 attaches `OPTICAL_FLOW_RAD` only when flow is already advertised inside `Sensors::init()`.
 

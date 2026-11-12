@@ -58,7 +58,7 @@ catswarm_append_docker_gpu() {
         CATSWARM_DOCKER_GPU_RUN_ARGS=(--gpus all)
         CATSWARM_DOCKER_GPU_ENV=(
             --env=NVIDIA_VISIBLE_DEVICES=all
-            --env=NVIDIA_DRIVER_CAPABILITIES=graphics,utility,compute
+            --env=NVIDIA_DRIVER_CAPABILITIES=graphics,display,utility,compute
             --env=__GLX_VENDOR_LIBRARY_NAME=nvidia
             --env=__NV_PRIME_RENDER_OFFLOAD=1
             --env=__VK_LAYER_NV_optimus=NVIDIA_only

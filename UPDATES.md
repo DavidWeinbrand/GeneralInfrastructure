@@ -1,5 +1,18 @@
 # Project Updates
 
+## [2026-11-12] NVIDIA rendering setup
+- The host was rendering Gazebo with llvmpipe despite an RTX A1000 being present.
+- Installed the Ubuntu-recommended NVIDIA 595 open driver and NVIDIA Container Toolkit, configured Docker's runtime, and reloaded Docker without stopping the simulation.
+- Driver activation requires a reboot from nouveau; the existing automatic GPU selector will use NVIDIA for a new simulation once `nvidia-smi` works.
+- GPU launches also request NVIDIA's X11 display capability.
+
+## [2026-11-12] Validate Docker before launch; YOLO bridge uses the project venv
+- Docker access and simulator image checks fail before cleanup with actionable errors.
+- `yolo_det_bridge.py` starts with the project `venv` Python; the system `python3` had no `cv2`, so no camera window or detections appeared.
+- Built the host simulator image from `PX4dockerfiles/SimGazebo` at `301ba4c`
+  with PX4 v1.17.0, without replacing project pins; verified five drones and
+  the visible Gazebo client.
+
 This file documents the development progress and changes made to the `CatSwarm/general_infrastructure` project by the AI agent.
 
 ## 0.1.1 - README matches the current launchers
